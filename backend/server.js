@@ -40,14 +40,30 @@ const parseAllowedOrigins = () => {
   );
 };
 
-const allowedOrigins = parseAllowedOrigins();
+const allowedOriginPatterns = parseAllowedOrigins();
+
+const isOriginAllowed = (origin) => {
+  if (!origin) return true;
+
+  const normalizedOrigin = origin.replace(/\/+$/, "");
+
+  return allowedOriginPatterns.some((pattern) => {
+    if (!pattern.includes("*")) {
+      return pattern === normalizedOrigin;
+    }
+
+    // Supports simple wildcard patterns like "https://*.vercel.app"
+    const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
+    const regexPattern = `^${escaped.replace(/\*/g, ".*")}$`;
+    return new RegExp(regexPattern).test(normalizedOrigin);
+  });
+};
 
 // Enhanced Socket.IO setup with improved connection handling
 const io = new Server(server, {
   cors: {
     origin: (origin, callback) => {
-      const normalizedOrigin = origin?.replace(/\/+$/, "");
-      if (!origin || allowedOrigins.includes(normalizedOrigin)) {
+      if (isOriginAllowed(origin)) {
         return callback(null, true);
       }
       return callback(new Error("Not allowed by Socket.IO CORS"));
@@ -93,14 +109,12 @@ app.use(
 app.use(
   cors({
     origin: function (origin, callback) {
-      const normalizedOrigin = origin?.replace(/\/+$/, "");
-
       // Enhanced CORS debugging
       console.log(
-        `🌐 CORS check - Origin: "${origin}" | Allowed: [${allowedOrigins.join(", ")}]`,
+        `🌐 CORS check - Origin: "${origin}" | Allowed patterns: [${allowedOriginPatterns.join(", ")}]`,
       );
 
-      if (!origin || allowedOrigins.includes(normalizedOrigin)) {
+      if (isOriginAllowed(origin)) {
         console.log(`✅ CORS allowed for origin: ${origin || "no-origin"}`);
         callback(null, true);
       } else {
