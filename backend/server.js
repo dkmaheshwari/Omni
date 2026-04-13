@@ -272,7 +272,9 @@ io.on("connection", (socket) => {
         return;
       }
 
+      const prefixedRoom = `thread:${threadId}`;
       await socket.join(threadId);
+      await socket.join(prefixedRoom);
 
       // Add user to online users for this thread
       if (socket.userId) {
@@ -295,7 +297,7 @@ io.on("connection", (socket) => {
       console.log(`📱 User ${socket.userId} joined thread room: ${threadId}`);
       socket.emit("thread:joined", {
         threadId,
-        roomSize: io.sockets.adapter.rooms.get(threadId)?.size || 0,
+        roomSize: io.sockets.adapter.rooms.get(prefixedRoom)?.size || io.sockets.adapter.rooms.get(threadId)?.size || 0,
       });
     } catch (error) {
       console.error("❌ Error joining thread:", error);
@@ -306,7 +308,9 @@ io.on("connection", (socket) => {
   // Leave thread room
   socket.on("thread:leave", async (threadId) => {
     try {
+      const prefixedRoom = `thread:${threadId}`;
       await socket.leave(threadId);
+      await socket.leave(prefixedRoom);
 
       // Remove user from online users for this thread
       if (socket.userId && onlineUsers.has(threadId)) {
