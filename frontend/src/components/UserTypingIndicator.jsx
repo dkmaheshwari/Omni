@@ -10,27 +10,35 @@ export default function UserTypingIndicator({ typingUsers, currentThreadId, curr
     return null;
   }
   
-  // Convert Set to Array and filter out current user
-  const typingUsersList = Array.from(currentThreadTyping).filter(
-    username => username !== currentUserEmail
-  );
+  // Support both legacy Set<string> and current Map<userId, userName> structures.
+  const typingUsersList = currentThreadTyping instanceof Map
+    ? Array.from(currentThreadTyping.values())
+    : Array.from(currentThreadTyping);
+
+  const normalizedTypingUsers = typingUsersList
+    .map((user) => {
+      if (typeof user === 'string') return user;
+      if (Array.isArray(user) && typeof user[1] === 'string') return user[1];
+      return '';
+    })
+    .filter((username) => !!username && username !== currentUserEmail);
   
-  if (typingUsersList.length === 0) {
+  if (normalizedTypingUsers.length === 0) {
     return null;
   }
   
   // Format typing message
   let typingMessage;
-  if (typingUsersList.length === 1) {
-    const name = typingUsersList[0].split('@')[0]; // Get name part of email
+  if (normalizedTypingUsers.length === 1) {
+    const name = normalizedTypingUsers[0].split('@')[0]; // Get name part of email
     typingMessage = `${name} is typing...`;
-  } else if (typingUsersList.length === 2) {
-    const name1 = typingUsersList[0].split('@')[0];
-    const name2 = typingUsersList[1].split('@')[0];
+  } else if (normalizedTypingUsers.length === 2) {
+    const name1 = normalizedTypingUsers[0].split('@')[0];
+    const name2 = normalizedTypingUsers[1].split('@')[0];
     typingMessage = `${name1} and ${name2} are typing...`;
   } else {
-    const name1 = typingUsersList[0].split('@')[0];
-    typingMessage = `${name1} and ${typingUsersList.length - 1} others are typing...`;
+    const name1 = normalizedTypingUsers[0].split('@')[0];
+    typingMessage = `${name1} and ${normalizedTypingUsers.length - 1} others are typing...`;
   }
   
   return (
