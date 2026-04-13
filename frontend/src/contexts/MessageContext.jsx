@@ -483,7 +483,6 @@ export const MessageProvider = ({ children }) => {
       pollingIntervalRef.current = null;
     }
     setIsPolling(false);
-    currentThreadIdRef.current = null;
   };
 
   // Switch to a different thread
@@ -498,6 +497,8 @@ export const MessageProvider = ({ children }) => {
     try {
       console.log(`🔄 Switching from thread ${currentThreadIdRef.current} to ${threadId}`);
       stopPolling();
+      // Keep active thread reference set so socket events are processed immediately.
+      currentThreadIdRef.current = threadId;
       console.log('🔧 DEBUG: Clearing messages...');
       clearMessages();
       
@@ -543,6 +544,7 @@ export const MessageProvider = ({ children }) => {
   useEffect(() => {
     return () => {
       stopPolling();
+      currentThreadIdRef.current = null;
     };
   }, []);
 
