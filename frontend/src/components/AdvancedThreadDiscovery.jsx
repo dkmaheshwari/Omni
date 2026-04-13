@@ -22,23 +22,9 @@ const AdvancedThreadDiscovery = () => {
   const { showError, showSuccess } = useNotification();
   const { joinThread } = useThread();
 
-  // Load initial data
-  useEffect(() => {
-    loadCategories();
-    loadRecommendedThreads();
-    searchThreads();
-  }, []);
+  const loadCategories = useCallback(async () => {
+    if (!currentUser) return;
 
-  // Search when filters change
-  useEffect(() => {
-    const debounceTimer = setTimeout(() => {
-      searchThreads();
-    }, 300);
-
-    return () => clearTimeout(debounceTimer);
-  }, [searchQuery, selectedCategory, selectedTags, sortBy]);
-
-  const loadCategories = async () => {
     try {
       const response = await axios.get("/thread-categories", {
         headers: {
@@ -49,9 +35,11 @@ const AdvancedThreadDiscovery = () => {
     } catch (error) {
       console.error("Error loading categories:", error);
     }
-  };
+  }, [currentUser]);
 
-  const loadRecommendedThreads = async () => {
+  const loadRecommendedThreads = useCallback(async () => {
+    if (!currentUser) return;
+
     setIsLoadingRecommendations(true);
     try {
       const response = await axios.get("/threads/recommended?limit=5", {
@@ -65,40 +53,70 @@ const AdvancedThreadDiscovery = () => {
     } finally {
       setIsLoadingRecommendations(false);
     }
-  };
+  }, [currentUser]);
 
-  const searchThreads = async (page = 1) => {
-    setIsLoading(true);
-    try {
-      const params = new URLSearchParams({
-        page: page.toString(),
-        limit: "10",
-        sortBy,
-      });
+  const searchThreads = useCallback(
+    async (page = 1) => {
+      if (!currentUser) return;
 
-      if (searchQuery.trim()) params.append("query", searchQuery.trim());
-      if (selectedCategory && selectedCategory !== "all")
-        params.append("category", selectedCategory);
-      if (selectedTags.length > 0)
-        params.append("tags", selectedTags.join(","));
+      setIsLoading(true);
+      try {
+        const params = new URLSearchParams({
+          page: page.toString(),
+          limit: "10",
+          sortBy,
+        });
 
-      const response = await axios.get(`/threads/search?${params}`, {
-        headers: {
-          Authorization: `Bearer ${await currentUser.getIdToken()}`,
-        },
-      });
+        if (searchQuery.trim()) params.append("query", searchQuery.trim());
+        if (selectedCategory && selectedCategory !== "all")
+          params.append("category", selectedCategory);
+        if (selectedTags.length > 0)
+          params.append("tags", selectedTags.join(","));
 
-      setThreads(response.data.threads || []);
-      setPagination(
-        response.data.pagination || { page: 1, total: 0, pages: 0 },
-      );
-    } catch (error) {
-      console.error("Error searching threads:", error);
-      showError("Failed to search threads");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+        const response = await axios.get(`/threads/search?${params}`, {
+          headers: {
+            Authorization: `Bearer ${await currentUser.getIdToken()}`,
+          },
+        });
+
+        setThreads(response.data.threads || []);
+        setPagination(
+          response.data.pagination || { page: 1, total: 0, pages: 0 },
+        );
+      } catch (error) {
+        console.error("Error searching threads:", error);
+        showError("Failed to search threads");
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [
+      currentUser,
+      searchQuery,
+      selectedCategory,
+      selectedTags,
+      sortBy,
+      showError,
+    ],
+  );
+
+  // Load initial data
+  useEffect(() => {
+    if (!currentUser) return;
+    loadCategories();
+    loadRecommendedThreads();
+    searchThreads();
+  }, [currentUser, loadCategories, loadRecommendedThreads, searchThreads]);
+
+  // Search when filters change
+  useEffect(() => {
+    if (!currentUser) return;
+    const debounceTimer = setTimeout(() => {
+      searchThreads();
+    }, 300);
+
+    return () => clearTimeout(debounceTimer);
+  }, [currentUser, searchThreads]);
 
   const handleJoinThread = async (thread) => {
     try {
