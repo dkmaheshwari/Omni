@@ -16,6 +16,7 @@ const {
   isValidObjectId,
   sanitizeTextInput,
 } = require("../utils/inputSanitizer");
+const documentRetrievalService = require("../services/documentRetrievalService");
 
 // REFACTOR: Helper function for thread authorization
 const validateThreadAccess = async (threadId, userId, userEmail) => {
@@ -113,8 +114,13 @@ const generateAIResponse = async (
   aiContext,
   conversationHistory,
   threadId,
+  documentContext = { snippets: [], contextText: "" },
 ) => {
-  const systemPrompt = generateContextAwareSystemPrompt(thread, aiContext);
+  const systemPrompt = generateContextAwareSystemPrompt(
+    thread,
+    aiContext,
+    documentContext,
+  );
 
   console.log(
     `🤖 Generating AI response for thread ${threadId} with context: ${aiContext.behaviorMode}`,
@@ -455,11 +461,25 @@ const postMessage = async (req, res) => {
 
     // Generate AI response using helper function
     try {
+      let documentContext = { snippets: [], contextText: "" };
+      try {
+        documentContext = await documentRetrievalService.getRelevantContext(
+          threadId,
+          sanitizedContent,
+        );
+      } catch (docError) {
+        console.warn("Document retrieval failed, continuing without docs:", {
+          threadId,
+          error: docError.message,
+        });
+      }
+
       const aiMessage = await generateAIResponse(
         thread,
         aiDecision.context,
         conversationHistory,
         threadId,
+        documentContext,
       );
 
       // Broadcast AI message using helper function
@@ -470,6 +490,10 @@ const postMessage = async (req, res) => {
         userMessage,
         aiMessage,
         aiContext: aiDecision.context,
+        docSources: documentContext.snippets?.map((snippet) => ({
+          fileName: snippet.fileName,
+          chunkIndex: snippet.chunkIndex,
+        })),
       });
     } catch (aiError) {
       console.error("AI response failed:", aiError);
@@ -777,6 +801,33 @@ const uploadFiles = async (req, res) => {
       attachments: attachments,
     });
 
+    // Index supported document files for thread-level retrieval (non-blocking behavior on errors)
+    let indexingResult = { indexedFiles: 0, indexedChunks: 0 };
+    if (attachments.length > 0) {
+      try {
+        indexingResult = await documentRetrievalService.indexMessageAttachments({
+          threadId,
+          messageId: message._id,
+          uploaderId: senderId,
+          attachments,
+        });
+        if (indexingResult.indexedFiles > 0) {
+          console.log("📚 Document chunks indexed:", {
+            threadId,
+            messageId: message._id,
+            indexedFiles: indexingResult.indexedFiles,
+            indexedChunks: indexingResult.indexedChunks,
+          });
+        }
+      } catch (indexError) {
+        console.error("Document indexing failed after upload:", {
+          threadId,
+          messageId: message._id,
+          error: indexError.message,
+        });
+      }
+    }
+
     // Update thread activity and message count
     await Thread.findByIdAndUpdate(threadId, {
       lastActivity: new Date(),
@@ -797,6 +848,8 @@ const uploadFiles = async (req, res) => {
       message: "Files uploaded successfully",
       data: message,
       attachments: attachments.length,
+      indexedDocumentFiles: indexingResult.indexedFiles,
+      indexedDocumentChunks: indexingResult.indexedChunks,
     });
   } catch (error) {
     console.error("File upload failed:", error);
@@ -870,7 +923,7 @@ const downloadFile = async (req, res) => {
 };
 
 // CRITICAL FIX: Context-aware AI response customization helpers
-function generateContextAwareSystemPrompt(thread, aiContext) {
+function generateContextAwareSystemPrompt(thread, aiContext, documentContext) {
   const participantCount = thread.participants.length;
   const { behaviorMode, responseType } = aiContext;
 
@@ -942,6 +995,18 @@ function generateContextAwareSystemPrompt(thread, aiContext) {
   - Use clear, accessible language appropriate for students
   - Encourage active learning and critical thinking
   - Be supportive and constructive in all interactions`;
+
+  if (documentContext?.contextText) {
+    basePrompt += `\n\nDOCUMENT CONTEXT AVAILABLE:
+You are provided with extracted snippets from files uploaded in this thread.
+- Prioritize these snippets when they are relevant to the user question.
+- If snippets conflict with prior chat context, prefer snippet facts.
+- Cite snippet sources inline like [Source 1], [Source 2].
+- If snippets do not answer the question, clearly say so and provide best-effort guidance.
+
+Retrieved snippets:
+${documentContext.contextText}`;
+  }
 
   return basePrompt;
 }
