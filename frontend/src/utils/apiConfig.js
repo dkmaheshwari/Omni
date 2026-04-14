@@ -1,4 +1,5 @@
 const DEFAULT_DEV_API_URL = "http://localhost:5051/api";
+const DEFAULT_PROD_API_URL = "https://omni-hglm.onrender.com/api";
 
 const normalizeUrl = (value) => {
   if (!value || typeof value !== "string") return "";
@@ -25,7 +26,7 @@ export const resolveApiBaseUrl = () => {
   }
 
   if (!configuredApiUrl) {
-    return "/api";
+    return DEFAULT_PROD_API_URL;
   }
 
   // Cloudflare tunnel hostnames are ephemeral and often expire.
@@ -33,9 +34,9 @@ export const resolveApiBaseUrl = () => {
   const allowTunnelInProd = import.meta.env.VITE_ALLOW_TUNNEL_URL === "true";
   if (isTryCloudflare && !allowTunnelInProd) {
     console.warn(
-      "Ignoring ephemeral trycloudflare API URL in production; falling back to same-origin /api.",
+      "Ignoring ephemeral trycloudflare API URL in production; falling back to stable backend URL.",
     );
-    return "/api";
+    return DEFAULT_PROD_API_URL;
   }
 
   return configuredApiUrl;

@@ -33,9 +33,21 @@ export default function CreateThread() {
     try {
       const response = await axios.get('/thread-categories');
       console.log('Categories response:', response.data);
-      setCategories(response.data.categories || response.data || []);
+
+      const rawCategories = Array.isArray(response.data?.categories)
+        ? response.data.categories
+        : Array.isArray(response.data)
+          ? response.data
+          : [];
+
+      if (!Array.isArray(rawCategories)) {
+        console.warn('Invalid categories payload format, defaulting to empty list');
+      }
+
+      setCategories(rawCategories);
     } catch (error) {
       console.error('Error loading categories:', error);
+      setCategories([]);
       if (error.response?.status === 401) {
         console.warn('User not authenticated for categories');
       } else {
