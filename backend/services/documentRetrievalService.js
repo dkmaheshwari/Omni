@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const pdfParse = require("pdf-parse");
+const mammoth = require("mammoth");
 const { RecursiveCharacterTextSplitter } = require("langchain/text_splitter");
 const ThreadDocumentChunk = require("../models/ThreadDocumentChunk");
 
@@ -8,6 +9,7 @@ const SUPPORTED_MIME_TYPES = new Set([
   "text/plain",
   "text/csv",
   "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ]);
 
 class DocumentRetrievalService {
@@ -35,6 +37,14 @@ class DocumentRetrievalService {
       const fileBuffer = fs.readFileSync(absolutePath);
       const parsed = await pdfParse(fileBuffer);
       return (parsed.text || "").trim();
+    }
+
+    if (
+      attachment.fileType ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ) {
+      const parsed = await mammoth.extractRawText({ path: absolutePath });
+      return (parsed.value || "").trim();
     }
 
     if (
@@ -144,7 +154,7 @@ class DocumentRetrievalService {
       return { snippets: [], contextText: "" };
     }
 
-    const scored = recentChunks
+    let scored = recentChunks
       .map((chunk) => ({
         ...chunk,
         score: this.scoreChunk(chunk.text, queryWords),
@@ -152,6 +162,14 @@ class DocumentRetrievalService {
       .filter((chunk) => chunk.score > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, maxChunks);
+
+    // Fallback: if no lexical match, provide recent chunks so AI can still reason from thread documents.
+    if (scored.length === 0) {
+      scored = recentChunks.slice(0, maxChunks).map((chunk) => ({
+        ...chunk,
+        score: 0,
+      }));
+    }
 
     const snippets = scored.map((chunk) => ({
       fileName: chunk.originalName,
