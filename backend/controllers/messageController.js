@@ -790,13 +790,21 @@ const uploadFiles = async (req, res) => {
     }
 
     // Create message with attachments using sanitized content
+    const attachmentSummary = attachments
+      .slice(0, 3)
+      .map((attachment) => attachment.originalName)
+      .join(", ");
+    const remainingAttachmentCount = Math.max(attachments.length - 3, 0);
+
     const message = await Message.create({
       threadId,
       sender: senderId,
       senderEmail: senderName,
       text:
         sanitizedContent ||
-        (attachments.length > 0 ? `Shared ${attachments.length} file(s)` : ""),
+        (attachments.length > 0
+          ? `Shared ${attachments.length} file(s): ${attachmentSummary}${remainingAttachmentCount > 0 ? ` (+${remainingAttachmentCount} more)` : ""}`
+          : ""),
       messageType: "user",
       attachments: attachments,
     });
@@ -805,12 +813,14 @@ const uploadFiles = async (req, res) => {
     let indexingResult = { indexedFiles: 0, indexedChunks: 0 };
     if (attachments.length > 0) {
       try {
-        indexingResult = await documentRetrievalService.indexMessageAttachments({
-          threadId,
-          messageId: message._id,
-          uploaderId: senderId,
-          attachments,
-        });
+        indexingResult = await documentRetrievalService.indexMessageAttachments(
+          {
+            threadId,
+            messageId: message._id,
+            uploaderId: senderId,
+            attachments,
+          },
+        );
         if (indexingResult.indexedFiles > 0) {
           console.log("📚 Document chunks indexed:", {
             threadId,

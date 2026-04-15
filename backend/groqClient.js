@@ -8,18 +8,24 @@ const AI_MODELS = {
   TUTORING: "llama-3.3-70b-versatile",
   CONTENT_GENERATION: "llama-3.3-70b-versatile",
   CODE_REVIEW: "llama-3.3-70b-versatile",
-  MATH_SOLVING: "llama-3.3-70b-versatile"
+  MATH_SOLVING: "llama-3.3-70b-versatile",
 };
 
 // System prompts for different AI capabilities
 const SYSTEM_PROMPTS = {
   GENERAL: "You are a helpful academic assistant.",
-  TUTORING: "You are an expert AI tutor. Provide personalized, step-by-step explanations. Ask follow-up questions to ensure understanding. Adapt your teaching style to the student's needs.",
-  CONTENT_GENERATION: "You are an expert content generator for educational materials. Create clear, structured, and engaging study materials.",
-  CODE_REVIEW: "You are an expert code reviewer. Provide detailed, constructive feedback on code quality, best practices, and potential improvements.",
-  MATH_SOLVING: "You are an expert mathematics tutor. Provide step-by-step solutions with clear explanations for each step.",
-  WRITING_ASSISTANT: "You are an expert writing assistant. Help improve grammar, style, clarity, and structure of written content.",
-  RESEARCH_ASSISTANT: "You are an expert research assistant. Help find relevant academic sources and provide proper citations."
+  TUTORING:
+    "You are an expert AI tutor. Provide personalized, step-by-step explanations. Ask follow-up questions to ensure understanding. Adapt your teaching style to the student's needs.",
+  CONTENT_GENERATION:
+    "You are an expert content generator for educational materials. Create clear, structured, and engaging study materials.",
+  CODE_REVIEW:
+    "You are an expert code reviewer. Provide detailed, constructive feedback on code quality, best practices, and potential improvements.",
+  MATH_SOLVING:
+    "You are an expert mathematics tutor. Provide step-by-step solutions with clear explanations for each step.",
+  WRITING_ASSISTANT:
+    "You are an expert writing assistant. Help improve grammar, style, clarity, and structure of written content.",
+  RESEARCH_ASSISTANT:
+    "You are an expert research assistant. Help find relevant academic sources and provide proper citations.",
 };
 
 // Enhanced AI client with multiple capabilities
@@ -29,12 +35,12 @@ class AdvancedAIClient {
     this.apiKey = process.env.GROQ_API_KEY;
   }
 
-  async generateResponse(prompt, capability = 'GENERAL', options = {}) {
+  async generateResponse(prompt, capability = "GENERAL", options = {}) {
     const {
       maxTokens = 500,
       temperature = 0.7,
       context = [],
-      userId = null
+      userId = null,
     } = options;
 
     const systemPrompt = SYSTEM_PROMPTS[capability] || SYSTEM_PROMPTS.GENERAL;
@@ -43,7 +49,7 @@ class AdvancedAIClient {
     const messages = [
       { role: "system", content: systemPrompt },
       ...context,
-      { role: "user", content: prompt }
+      { role: "user", content: prompt },
     ];
 
     try {
@@ -60,7 +66,7 @@ class AdvancedAIClient {
             Authorization: `Bearer ${this.apiKey}`,
             "Content-Type": "application/json",
           },
-        }
+        },
       );
 
       return {
@@ -68,16 +74,26 @@ class AdvancedAIClient {
         model: model,
         capability: capability,
         usage: response.data.usage,
-        timestamp: new Date()
+        timestamp: new Date(),
       };
     } catch (error) {
-      console.error('AI Client Error:', error.response?.data || error.message);
+      console.error("AI Client Error:", error.response?.data || error.message);
       throw new Error(`AI generation failed: ${error.message}`);
     }
   }
 
   // Tutoring-specific methods
-  async generateTutoringResponse(prompt, context = [], learningStyle = 'visual') {
+  async generateTutoringResponse(
+    prompt,
+    context = [],
+    learningStyle = "visual",
+    options = {},
+  ) {
+    const documentContext = options?.documentContext || {
+      snippets: [],
+      contextText: "",
+    };
+
     const enhancedPrompt = `
       Learning Style: ${learningStyle}
       Student Question: ${prompt}
@@ -87,19 +103,32 @@ class AdvancedAIClient {
       2. Adapts to the ${learningStyle} learning style
       3. Includes follow-up questions to check understanding
       4. Suggests next steps for deeper learning
+
+      ${
+        documentContext?.contextText
+          ? `
+      Uploaded Document Context (from the student's selected thread):
+      ${documentContext.contextText}
+
+      Use the above document snippets as primary evidence when relevant.
+      If you use snippet facts, cite them inline like [Source 1], [Source 2].
+      If the snippets do not contain enough information, say that clearly and then provide best-effort guidance.
+      `
+          : ""
+      }
     `;
 
-    return await this.generateResponse(enhancedPrompt, 'TUTORING', {
+    return await this.generateResponse(enhancedPrompt, "TUTORING", {
       context,
       maxTokens: 800,
-      temperature: 0.6
+      temperature: 0.6,
     });
   }
 
   // Content generation methods
-  async generateStudyGuide(topics, difficulty = 'intermediate') {
+  async generateStudyGuide(topics, difficulty = "intermediate") {
     const prompt = `
-      Create a comprehensive study guide for the following topics: ${topics.join(', ')}
+      Create a comprehensive study guide for the following topics: ${topics.join(", ")}
       Difficulty level: ${difficulty}
       
       Include:
@@ -110,22 +139,26 @@ class AdvancedAIClient {
       5. Additional resources for further study
     `;
 
-    return await this.generateResponse(prompt, 'CONTENT_GENERATION', {
+    return await this.generateResponse(prompt, "CONTENT_GENERATION", {
       maxTokens: 1000,
-      temperature: 0.5
+      temperature: 0.5,
     });
   }
 
   // Enhanced study guide generation with templates and customization
-  async generateEnhancedStudyGuide(topics, difficulty = 'intermediate', options = {}) {
+  async generateEnhancedStudyGuide(
+    topics,
+    difficulty = "intermediate",
+    options = {},
+  ) {
     const {
-      template = 'comprehensive',
+      template = "comprehensive",
       customization = {},
       learningObjectives = [],
       studyTimeTarget = 60,
       includeExamples = true,
       includeKeyPoints = true,
-      includeQuizQuestions = false
+      includeQuizQuestions = false,
     } = options;
 
     // Template-specific prompts
@@ -135,42 +168,47 @@ class AdvancedAIClient {
       flashcard: `Create a flashcard-style study guide with key terms and definitions`,
       visual: `Create a visual study guide with diagrams and concept maps`,
       quick_review: `Create a quick review study guide focusing on essential points`,
-      exam_prep: `Create an exam preparation study guide with practice questions`
+      exam_prep: `Create an exam preparation study guide with practice questions`,
     };
 
-    const basePrompt = templatePrompts[template] || templatePrompts.comprehensive;
-    
+    const basePrompt =
+      templatePrompts[template] || templatePrompts.comprehensive;
+
     let prompt = `
-      ${basePrompt} for the following topics: ${topics.join(', ')}
+      ${basePrompt} for the following topics: ${topics.join(", ")}
       Difficulty level: ${difficulty}
       Target study time: ${studyTimeTarget} minutes
       
-      ${learningObjectives.length > 0 ? `Learning Objectives:
-      ${learningObjectives.map(obj => `- ${obj}`).join('\n')}` : ''}
+      ${
+        learningObjectives.length > 0
+          ? `Learning Objectives:
+      ${learningObjectives.map((obj) => `- ${obj}`).join("\n")}`
+          : ""
+      }
       
       Structure the guide with:
       1. Clear section headers
-      2. ${includeKeyPoints ? 'Key points for each section' : 'Detailed explanations'}
-      3. ${includeExamples ? 'Practical examples and applications' : 'Theoretical concepts'}
+      2. ${includeKeyPoints ? "Key points for each section" : "Detailed explanations"}
+      3. ${includeExamples ? "Practical examples and applications" : "Theoretical concepts"}
       4. Summary of main concepts
-      ${includeQuizQuestions ? '5. Practice questions at the end' : ''}
+      ${includeQuizQuestions ? "5. Practice questions at the end" : ""}
       
-      ${customization.focusAreas ? `Focus especially on: ${customization.focusAreas.join(', ')}` : ''}
-      ${customization.excludeTopics ? `Exclude: ${customization.excludeTopics.join(', ')}` : ''}
-      ${customization.additionalRequirements ? `Additional requirements: ${customization.additionalRequirements}` : ''}
+      ${customization.focusAreas ? `Focus especially on: ${customization.focusAreas.join(", ")}` : ""}
+      ${customization.excludeTopics ? `Exclude: ${customization.excludeTopics.join(", ")}` : ""}
+      ${customization.additionalRequirements ? `Additional requirements: ${customization.additionalRequirements}` : ""}
       
       Format the response with clear markdown headers and bullet points.
     `;
 
-    return await this.generateResponse(prompt, 'CONTENT_GENERATION', {
+    return await this.generateResponse(prompt, "CONTENT_GENERATION", {
       maxTokens: 2000,
-      temperature: 0.4 // Lower temperature for more structured output
+      temperature: 0.4, // Lower temperature for more structured output
     });
   }
 
-  async generateQuiz(topics, questionCount = 5, difficulty = 'intermediate') {
+  async generateQuiz(topics, questionCount = 5, difficulty = "intermediate") {
     const prompt = `
-      Create a ${questionCount}-question quiz on: ${topics.join(', ')}
+      Create a ${questionCount}-question quiz on: ${topics.join(", ")}
       Difficulty level: ${difficulty}
       
       Format each question EXACTLY as shown in this example:
@@ -200,9 +238,9 @@ class AdvancedAIClient {
       - Make sure each question is complete and well-formed
     `;
 
-    return await this.generateResponse(prompt, 'CONTENT_GENERATION', {
+    return await this.generateResponse(prompt, "CONTENT_GENERATION", {
       maxTokens: 1200,
-      temperature: 0.4
+      temperature: 0.4,
     });
   }
 
@@ -217,14 +255,14 @@ class AdvancedAIClient {
       Focus on key concepts, definitions, and important facts.
     `;
 
-    return await this.generateResponse(prompt, 'CONTENT_GENERATION', {
+    return await this.generateResponse(prompt, "CONTENT_GENERATION", {
       maxTokens: 600,
-      temperature: 0.3
+      temperature: 0.3,
     });
   }
 
   // Intelligent assistance methods
-  async reviewCode(code, language = 'javascript') {
+  async reviewCode(code, language = "javascript") {
     const prompt = `
       Review this ${language} code and provide detailed feedback:
       
@@ -240,13 +278,13 @@ class AdvancedAIClient {
       5. Suggestions for refactoring
     `;
 
-    return await this.generateResponse(prompt, 'CODE_REVIEW', {
+    return await this.generateResponse(prompt, "CODE_REVIEW", {
       maxTokens: 800,
-      temperature: 0.3
+      temperature: 0.3,
     });
   }
 
-  async assistWithWriting(text, assistanceType = 'grammar') {
+  async assistWithWriting(text, assistanceType = "grammar") {
     const prompt = `
       Provide ${assistanceType} assistance for this text:
       
@@ -259,9 +297,9 @@ class AdvancedAIClient {
       4. Word choice enhancements
     `;
 
-    return await this.generateResponse(prompt, 'WRITING_ASSISTANT', {
+    return await this.generateResponse(prompt, "WRITING_ASSISTANT", {
       maxTokens: 600,
-      temperature: 0.4
+      temperature: 0.4,
     });
   }
 
@@ -269,7 +307,7 @@ class AdvancedAIClient {
     const prompt = `
       Solve this math problem: ${problem}
       
-      ${showSteps ? 'Provide step-by-step solution with explanations for each step.' : 'Provide the solution with brief explanation.'}
+      ${showSteps ? "Provide step-by-step solution with explanations for each step." : "Provide the solution with brief explanation."}
       
       Include:
       1. Problem analysis
@@ -278,9 +316,9 @@ class AdvancedAIClient {
       4. Key concepts used
     `;
 
-    return await this.generateResponse(prompt, 'MATH_SOLVING', {
+    return await this.generateResponse(prompt, "MATH_SOLVING", {
       maxTokens: 700,
-      temperature: 0.2
+      temperature: 0.2,
     });
   }
 }

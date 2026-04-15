@@ -4,6 +4,7 @@ const pdfParse = require("pdf-parse");
 const mammoth = require("mammoth");
 const { RecursiveCharacterTextSplitter } = require("langchain/text_splitter");
 const ThreadDocumentChunk = require("../models/ThreadDocumentChunk");
+const Message = require("../models/message");
 
 const SUPPORTED_MIME_TYPES = new Set([
   "text/plain",
@@ -116,6 +117,59 @@ class DocumentRetrievalService {
     return { indexedFiles, indexedChunks };
   }
 
+  async backfillThreadDocuments(threadId, maxMessages = 80) {
+    if (!threadId) {
+      return { indexedFiles: 0, indexedChunks: 0 };
+    }
+
+    const messagesWithAttachments = await Message.find({
+      threadId,
+      "attachments.0": { $exists: true },
+    })
+      .sort({ createdAt: -1 })
+      .limit(maxMessages)
+      .lean();
+
+    let indexedFiles = 0;
+    let indexedChunks = 0;
+
+    for (const message of messagesWithAttachments) {
+      const attachments = (message.attachments || []).filter((attachment) =>
+        this.isSupportedAttachment(attachment),
+      );
+
+      if (attachments.length === 0) {
+        continue;
+      }
+
+      // Skip files already indexed for this message.
+      const alreadyIndexed = await ThreadDocumentChunk.distinct("fileName", {
+        threadId,
+        sourceMessageId: message._id,
+      });
+
+      const pendingAttachments = attachments.filter(
+        (attachment) => !alreadyIndexed.includes(attachment.fileName),
+      );
+
+      if (pendingAttachments.length === 0) {
+        continue;
+      }
+
+      const indexingResult = await this.indexMessageAttachments({
+        threadId,
+        messageId: message._id,
+        uploaderId: message.sender || "unknown",
+        attachments: pendingAttachments,
+      });
+
+      indexedFiles += indexingResult.indexedFiles;
+      indexedChunks += indexingResult.indexedChunks;
+    }
+
+    return { indexedFiles, indexedChunks };
+  }
+
   scoreChunk(chunkText, queryWords) {
     const lower = chunkText.toLowerCase();
     let score = 0;
@@ -145,10 +199,27 @@ class DocumentRetrievalService {
       return { snippets: [], contextText: "" };
     }
 
-    const recentChunks = await ThreadDocumentChunk.find({ threadId })
+    let recentChunks = await ThreadDocumentChunk.find({ threadId })
       .sort({ createdAt: -1 })
       .limit(300)
       .lean();
+
+    if (recentChunks.length === 0) {
+      try {
+        const backfillResult = await this.backfillThreadDocuments(threadId);
+        if (backfillResult.indexedChunks > 0) {
+          recentChunks = await ThreadDocumentChunk.find({ threadId })
+            .sort({ createdAt: -1 })
+            .limit(300)
+            .lean();
+        }
+      } catch (error) {
+        console.warn("Document backfill failed, continuing without docs:", {
+          threadId,
+          error: error.message,
+        });
+      }
+    }
 
     if (recentChunks.length === 0) {
       return { snippets: [], contextText: "" };

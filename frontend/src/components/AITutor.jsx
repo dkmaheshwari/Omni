@@ -1,59 +1,74 @@
 // AI Tutor Component - Main AI tutoring interface
-import React, { useState, useEffect, useRef } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import axios from '../axios';
+import React, { useState, useEffect, useRef } from "react";
+import { useAuth } from "../contexts/AuthContext";
+import { useThread } from "../contexts/ThreadContext";
+import axios from "../axios";
 
 const AITutor = () => {
   const { user } = useAuth();
+  const { threads, fetchThreads, selectedThread } = useThread();
   const [sessionId, setSessionId] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [currentMessage, setCurrentMessage] = useState('');
+  const [currentMessage, setCurrentMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [tutorSettings, setTutorSettings] = useState({
-    subject: '',
-    difficulty: 'intermediate',
-    learningStyle: 'visual'
+    subject: "",
+    difficulty: "intermediate",
+    learningStyle: "visual",
   });
   const [sessionActive, setSessionActive] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
+  const [documentThreadId, setDocumentThreadId] = useState("");
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
+  useEffect(() => {
+    fetchThreads();
+  }, [fetchThreads]);
+
+  useEffect(() => {
+    if (selectedThread?._id && !documentThreadId) {
+      setDocumentThreadId(selectedThread._id);
+    }
+  }, [selectedThread, documentThreadId]);
+
   const startTutoringSession = async () => {
     if (!tutorSettings.subject) {
-      alert('Please select a subject to start tutoring');
+      alert("Please select a subject to start tutoring");
       return;
     }
 
     setIsLoading(true);
     try {
-      const response = await axios.post('/ai/tutor/session', {
+      const response = await axios.post("/ai/tutor/session", {
         subject: tutorSettings.subject,
         difficulty: tutorSettings.difficulty,
-        goals: [`Learn ${tutorSettings.subject} effectively`]
+        goals: [`Learn ${tutorSettings.subject} effectively`],
       });
 
       if (response.data.success) {
         setSessionId(response.data.sessionId);
         setSessionActive(true);
-        setMessages([{
-          id: Date.now(),
-          type: 'ai',
-          content: response.data.response,
-          timestamp: new Date()
-        }]);
+        setMessages([
+          {
+            id: Date.now(),
+            type: "ai",
+            content: response.data.response,
+            timestamp: new Date(),
+          },
+        ]);
         setSuggestions(response.data.recommendations || []);
       }
     } catch (error) {
-      console.error('Error starting tutoring session:', error);
-      alert('Failed to start tutoring session. Please try again.');
+      console.error("Error starting tutoring session:", error);
+      alert("Failed to start tutoring session. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -64,46 +79,47 @@ const AITutor = () => {
 
     const userMessage = {
       id: Date.now(),
-      type: 'user',
+      type: "user",
       content: currentMessage,
-      timestamp: new Date()
+      timestamp: new Date(),
     };
 
-    setMessages(prev => [...prev, userMessage]);
-    setCurrentMessage('');
+    setMessages((prev) => [...prev, userMessage]);
+    setCurrentMessage("");
     setIsLoading(true);
 
     try {
-      const response = await axios.post('/ai/tutor/question', {
+      const response = await axios.post("/ai/tutor/question", {
         question: currentMessage,
         sessionId: sessionId,
-        context: messages.slice(-5).map(msg => ({
-          role: msg.type === 'user' ? 'user' : 'assistant',
-          content: msg.content
-        }))
+        threadId: documentThreadId || undefined,
+        context: messages.slice(-5).map((msg) => ({
+          role: msg.type === "user" ? "user" : "assistant",
+          content: msg.content,
+        })),
       });
 
       if (response.data.success) {
         const aiMessage = {
           id: Date.now() + 1,
-          type: 'ai',
+          type: "ai",
           content: response.data.response,
           timestamp: new Date(),
-          interactionId: response.data.interactionId
+          interactionId: response.data.interactionId,
         };
 
-        setMessages(prev => [...prev, aiMessage]);
+        setMessages((prev) => [...prev, aiMessage]);
         setSuggestions(response.data.suggestions || []);
       }
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error("Error sending message:", error);
       const errorMessage = {
         id: Date.now() + 1,
-        type: 'error',
-        content: 'Sorry, I encountered an error. Please try again.',
-        timestamp: new Date()
+        type: "error",
+        content: "Sorry, I encountered an error. Please try again.",
+        timestamp: new Date(),
       };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
     }
@@ -115,19 +131,19 @@ const AITutor = () => {
 
   const provideFeedback = async (messageId, rating, helpful) => {
     try {
-      const message = messages.find(msg => msg.id === messageId);
+      const message = messages.find((msg) => msg.id === messageId);
       if (!message || !message.interactionId) return;
 
-      await axios.post('/ai/tutor/feedback', {
+      await axios.post("/ai/tutor/feedback", {
         interactionId: message.interactionId,
         feedback: {
           rating,
           helpful,
-          feedbackDate: new Date()
-        }
+          feedbackDate: new Date(),
+        },
       });
     } catch (error) {
-      console.error('Error providing feedback:', error);
+      console.error("Error providing feedback:", error);
     }
   };
 
@@ -139,7 +155,7 @@ const AITutor = () => {
   };
 
   const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
     }
@@ -149,10 +165,12 @@ const AITutor = () => {
     <div className="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-lg">
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-800 mb-4">AI Tutor</h2>
-        
+
         {!sessionActive && (
           <div className="bg-gray-50 p-4 rounded-lg mb-4">
-            <h3 className="text-lg font-semibold mb-3">Start a Tutoring Session</h3>
+            <h3 className="text-lg font-semibold mb-3">
+              Start a Tutoring Session
+            </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -160,7 +178,12 @@ const AITutor = () => {
                 </label>
                 <select
                   value={tutorSettings.subject}
-                  onChange={(e) => setTutorSettings(prev => ({ ...prev, subject: e.target.value }))}
+                  onChange={(e) =>
+                    setTutorSettings((prev) => ({
+                      ...prev,
+                      subject: e.target.value,
+                    }))
+                  }
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Select a subject</option>
@@ -173,14 +196,19 @@ const AITutor = () => {
                   <option value="history">History</option>
                 </select>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Difficulty Level
                 </label>
                 <select
                   value={tutorSettings.difficulty}
-                  onChange={(e) => setTutorSettings(prev => ({ ...prev, difficulty: e.target.value }))}
+                  onChange={(e) =>
+                    setTutorSettings((prev) => ({
+                      ...prev,
+                      difficulty: e.target.value,
+                    }))
+                  }
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="beginner">Beginner</option>
@@ -188,14 +216,19 @@ const AITutor = () => {
                   <option value="advanced">Advanced</option>
                 </select>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Learning Style
                 </label>
                 <select
                   value={tutorSettings.learningStyle}
-                  onChange={(e) => setTutorSettings(prev => ({ ...prev, learningStyle: e.target.value }))}
+                  onChange={(e) =>
+                    setTutorSettings((prev) => ({
+                      ...prev,
+                      learningStyle: e.target.value,
+                    }))
+                  }
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="visual">Visual</option>
@@ -205,16 +238,38 @@ const AITutor = () => {
                 </select>
               </div>
             </div>
-            
+
             <button
               onClick={startTutoringSession}
               disabled={isLoading}
               className="w-full md:w-auto px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
             >
-              {isLoading ? 'Starting Session...' : 'Start Tutoring Session'}
+              {isLoading ? "Starting Session..." : "Start Tutoring Session"}
             </button>
           </div>
         )}
+
+        <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-4">
+          <label className="block text-sm font-medium text-blue-900 mb-1">
+            Document Context Thread (optional)
+          </label>
+          <select
+            value={documentThreadId}
+            onChange={(e) => setDocumentThreadId(e.target.value)}
+            className="w-full px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">No thread selected (general tutoring)</option>
+            {threads.map((thread) => (
+              <option key={thread._id} value={thread._id}>
+                {thread.title}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-blue-800 mt-2">
+            Pick the thread where you uploaded files if you want the tutor to
+            answer from those documents.
+          </p>
+        </div>
       </div>
 
       {sessionActive && (
@@ -224,7 +279,9 @@ const AITutor = () => {
               <h3 className="font-semibold text-gray-800">
                 {tutorSettings.subject} - {tutorSettings.difficulty} level
               </h3>
-              <p className="text-sm text-gray-600">Learning Style: {tutorSettings.learningStyle}</p>
+              <p className="text-sm text-gray-600">
+                Learning Style: {tutorSettings.learningStyle}
+              </p>
             </div>
             <button
               onClick={endSession}
@@ -238,23 +295,23 @@ const AITutor = () => {
             {messages.map((message) => (
               <div
                 key={message.id}
-                className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
+                className={`flex ${message.type === "user" ? "justify-end" : "justify-start"}`}
               >
                 <div
                   className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                    message.type === 'user'
-                      ? 'bg-blue-600 text-white'
-                      : message.type === 'error'
-                      ? 'bg-red-100 text-red-800'
-                      : 'bg-gray-100 text-gray-800'
+                    message.type === "user"
+                      ? "bg-blue-600 text-white"
+                      : message.type === "error"
+                        ? "bg-red-100 text-red-800"
+                        : "bg-gray-100 text-gray-800"
                   }`}
                 >
                   <p className="whitespace-pre-wrap">{message.content}</p>
                   <p className="text-xs opacity-75 mt-1">
                     {message.timestamp.toLocaleTimeString()}
                   </p>
-                  
-                  {message.type === 'ai' && message.interactionId && (
+
+                  {message.type === "ai" && message.interactionId && (
                     <div className="mt-2 flex space-x-2">
                       <button
                         onClick={() => provideFeedback(message.id, 5, true)}
@@ -273,7 +330,7 @@ const AITutor = () => {
                 </div>
               </div>
             ))}
-            
+
             {isLoading && (
               <div className="flex justify-start">
                 <div className="bg-gray-100 text-gray-800 px-4 py-2 rounded-lg">
@@ -284,13 +341,15 @@ const AITutor = () => {
                 </div>
               </div>
             )}
-            
+
             <div ref={messagesEndRef} />
           </div>
 
           {suggestions.length > 0 && (
             <div className="p-4 bg-gray-50 border-t">
-              <h4 className="text-sm font-semibold text-gray-700 mb-2">Suggested Questions:</h4>
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">
+                Suggested Questions:
+              </h4>
               <div className="flex flex-wrap gap-2">
                 {suggestions.map((suggestion, index) => (
                   <button
