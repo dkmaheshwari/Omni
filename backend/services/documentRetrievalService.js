@@ -13,6 +13,8 @@ const SUPPORTED_MIME_TYPES = new Set([
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ]);
 
+const SUPPORTED_EXTENSIONS = new Set([".pdf", ".docx", ".txt", ".csv"]);
+
 class DocumentRetrievalService {
   constructor() {
     this.splitter = new RecursiveCharacterTextSplitter({
@@ -21,8 +23,48 @@ class DocumentRetrievalService {
     });
   }
 
+  detectAttachmentType(attachment) {
+    const mimeType = (attachment?.fileType || "").toLowerCase();
+    const fileName = attachment?.originalName || attachment?.fileName || "";
+    const extension = path.extname(fileName).toLowerCase();
+
+    if (mimeType === "application/pdf" || extension === ".pdf") {
+      return "pdf";
+    }
+
+    if (
+      mimeType ===
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      extension === ".docx"
+    ) {
+      return "docx";
+    }
+
+    if (mimeType === "text/plain" || extension === ".txt") {
+      return "txt";
+    }
+
+    if (mimeType === "text/csv" || extension === ".csv") {
+      return "csv";
+    }
+
+    return null;
+  }
+
   isSupportedAttachment(attachment) {
-    return SUPPORTED_MIME_TYPES.has(attachment.fileType);
+    const type = this.detectAttachmentType(attachment);
+
+    // Keep MIME allowlist guard, but also accept known document extensions.
+    if (type) {
+      return true;
+    }
+
+    const fileName = attachment?.originalName || attachment?.fileName || "";
+    const extension = path.extname(fileName).toLowerCase();
+    return (
+      SUPPORTED_MIME_TYPES.has((attachment?.fileType || "").toLowerCase()) ||
+      SUPPORTED_EXTENSIONS.has(extension)
+    );
   }
 
   async extractText(attachment) {
@@ -34,24 +76,20 @@ class DocumentRetrievalService {
       return "";
     }
 
-    if (attachment.fileType === "application/pdf") {
+    const detectedType = this.detectAttachmentType(attachment);
+
+    if (detectedType === "pdf") {
       const fileBuffer = fs.readFileSync(absolutePath);
       const parsed = await pdfParse(fileBuffer);
       return (parsed.text || "").trim();
     }
 
-    if (
-      attachment.fileType ===
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    ) {
+    if (detectedType === "docx") {
       const parsed = await mammoth.extractRawText({ path: absolutePath });
       return (parsed.value || "").trim();
     }
 
-    if (
-      attachment.fileType === "text/plain" ||
-      attachment.fileType === "text/csv"
-    ) {
+    if (detectedType === "txt" || detectedType === "csv") {
       return fs.readFileSync(absolutePath, "utf8").trim();
     }
 

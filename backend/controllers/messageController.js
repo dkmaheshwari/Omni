@@ -1004,7 +1004,8 @@ function generateContextAwareSystemPrompt(thread, aiContext, documentContext) {
   - Keep responses concise but informative (aim for 200-400 words)
   - Use clear, accessible language appropriate for students
   - Encourage active learning and critical thinking
-  - Be supportive and constructive in all interactions`;
+  - Be supportive and constructive in all interactions
+  - Never claim you cannot access uploaded files in this thread; use available snippets when present`;
 
   if (documentContext?.contextText) {
     basePrompt += `\n\nDOCUMENT CONTEXT AVAILABLE:
@@ -1016,6 +1017,10 @@ You are provided with extracted snippets from files uploaded in this thread.
 
 Retrieved snippets:
 ${documentContext.contextText}`;
+  } else {
+    basePrompt += `\n\nNO EXTRACTED SNIPPETS FOUND:
+If the user asks about an uploaded file and there are no extracted snippets, explain that no readable text was extracted yet.
+Ask the user to upload a text-based PDF/DOCX/TXT/CSV or paste the relevant excerpt, then continue helping.`;
   }
 
   return basePrompt;
